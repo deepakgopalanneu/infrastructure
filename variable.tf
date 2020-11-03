@@ -89,3 +89,19 @@ variable "s3roleName"{
 variable "ec2InstanceProfile"{
 	default="ec2-s3-profile"
 }
+variable "codedeploy_bucket_arn"{
+	default="arn:aws:s3:::prod.codedeploy.deepakgopalan.me"
+}
+variable "code_deploy_policy"{
+	default="CodeDeploy-EC2-S3"
+}
+variable "ghactions_s3policyname"{
+	default="GH-Upload-To-S3"
+}
+variable "ghactions_username"{
+	default="ghactions"
+}
+
+variable "CodeDeployEC2ServiceRole"{
+	default="CodeDeployEC2ServiceRole"
+}

@@ -272,7 +272,8 @@ policy = <<EOF
 }
 EOF
 }
-# IAM ROLE
+
+# IAM ROLE for EC2 instance(app server) to post objects on S3
 resource "aws_iam_role" "ec2role" {
   name = var.s3roleName
   assume_role_policy = <<EOF
@@ -294,8 +295,8 @@ EOF
     Name = "EC2-S3 access policy"
   }
 }
-
-resource "aws_iam_role_policy_attachment" "role_policy_attacher" {
+# attaching role ec2-s3 role to the webapps3 policy
+resource "aws_iam_role_policy_attachment" "ec2_s3_role_policy_attacher" {
   role       = aws_iam_role.ec2role.name
   policy_arn = aws_iam_policy.WebAppS3.arn
 }
@@ -303,4 +304,102 @@ resource "aws_iam_role_policy_attachment" "role_policy_attacher" {
 resource "aws_iam_instance_profile" "ec2_s3_profile" {
   name = var.ec2InstanceProfile
   role = aws_iam_role.ec2role.name
+}
+
+# IAM role for codedeploy EC2 instance to fetch artifacts from S3
+resource "aws_iam_role" "codedeploy_ec2_s3" {
+  name = var.CodeDeployEC2ServiceRole
+}
+
+# Creating policy for code deploy EC2 to access S3
+
+resource "aws_iam_policy" "code_deploy_policy" {
+  name        = var.code_deploy_policy
+  description = "Policy for EC2 instance to store and retrieve  artifacts in S3"
+policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:Get*",
+        "s3:List*"
+      ],
+      "Resource": ["${var.codedeploy_bucket_arn}","${codedeploy_bucket_arn}\/*" ]
+    }
+  ]
+}
+EOF
+}
+
+resource "aws_iam_policy" "ghactions_s3upload_policy" {
+  name        = var.ghactions_s3policyname
+  description = "Policy for Github actions script to store artifacts in S3"
+policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:Get*",
+        "s3:List*"
+      ],
+      "Resource": ["${var.codedeploy_bucket_arn}","${var.codedeploy_bucket_arn}\/*" ]
+    }
+  ]
+}
+EOF
+}
+
+resource "aws_iam_policy" "ghactions_s3upload_policy" {
+  name        = var.ghactions_s3policyname
+  description = "Policy for Github actions script to store artifacts in S3"
+policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "codedeploy:RegisterApplicationRevision",
+        "codedeploy:GetApplicationRevision"
+      ],
+      "Resource": [
+        "arn:aws:codedeploy:AWS_REGION:AWS_ACCOUNT_ID:application:CODE_DEPLOY_APPLICATION_NAME"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "codedeploy:CreateDeployment",
+        "codedeploy:GetDeployment"
+      ],
+      "Resource": [
+        "*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "codedeploy:GetDeploymentConfig"
+      ],
+      "Resource": [
+        "arn:aws:codedeploy:${var.aws_region}:AWS_ACCOUNT_ID:deploymentconfig:CodeDeployDefault.OneAtATime",
+        "arn:aws:codedeploy:AWS_REGION:AWS_ACCOUNT_ID:deploymentconfig:CodeDeployDefault.HalfAtATime",
+        "arn:aws:codedeploy:AWS_REGION:AWS_ACCOUNT_ID:deploymentconfig:CodeDeployDefault.AllAtOnce"
+      ]
+    }
+  ]
+}
+EOF
+}
+
+#attach policies to ghactions user
+
+resource "aws_iam_user_policy_attachment" "ghaction_policy_attach" {
+  user       = var.ghactions_username
+  policy_arn = aws_iam_policy.policy.arn
 }
