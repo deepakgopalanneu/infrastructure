@@ -89,3 +89,57 @@ variable "s3roleName"{
 variable "ec2InstanceProfile"{
 	default="ec2-s3-profile"
 }
+variable "codedeploy_bucket_arn"{
+	description = "Enter the bucket ARN"
+}
+
+variable "codedeploy_bucket_arn_star"{
+
+}
+variable "CodeDeploy-EC2-S3"{
+	default="CodeDeploy-EC2-S3"
+}
+variable "GH-Upload-To-S3"{
+	default="GH-Upload-To-S3"
+}
+
+variable "ghactions_username"{
+	default="ghactions"
+}
+
+variable "GH-Code-Deploy"{
+	default= "GH-Code-Deploy"
+}
+
+variable "CodeDeployEC2ServiceRole"{
+	default="CodeDeployEC2ServiceRole"
+}
+
+variable "CodeDeployServiceRole"{
+	default="CodeDeployServiceRole"
+}
+
+variable "account_id"{
+
+}
+
+variable "CodeDeployServiceRole_policy"{
+	default="arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole"
+}
+
+variable "codedeploy_appname"{
+	default="csye6225-webapp"
+}
+
+variable "codedeploy_group"{
+	default="csye6225-webapp-deployment"
+}
+
+variable "zoneId"{
+	description = "Enter the ZoneId of the hosted Zone"
+
+}
+variable "route53_record_name"{
+	description = "Enter Record Name ex: api.dev.domainname.tld"
+
+}
