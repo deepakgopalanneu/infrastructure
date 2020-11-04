@@ -301,57 +301,6 @@ resource "aws_iam_role_policy_attachment" "ec2_s3_role_policy_attacher" {
   policy_arn = aws_iam_policy.WebAppS3.arn
 }
 
-# This policy is required for EC2 instances to download latest application revision.
-resource "aws_iam_policy" "gh_ec2_ami" {
-  name        = var.gh_ec2_ami
-  description = "This policy provides the minimal set permissions necessary for Packer to work:"
-policy = <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "ec2:AttachVolume",
-        "ec2:AuthorizeSecurityGroupIngress",
-        "ec2:CopyImage",
-        "ec2:CreateImage",
-        "ec2:CreateKeypair",
-        "ec2:CreateSecurityGroup",
-        "ec2:CreateSnapshot",
-        "ec2:CreateTags",
-        "ec2:CreateVolume",
-        "ec2:DeleteKeyPair",
-        "ec2:DeleteSecurityGroup",
-        "ec2:DeleteSnapshot",
-        "ec2:DeleteVolume",
-        "ec2:DeregisterImage",
-        "ec2:DescribeImageAttribute",
-        "ec2:DescribeImages",
-        "ec2:DescribeInstances",
-        "ec2:DescribeInstanceStatus",
-        "ec2:DescribeRegions",
-        "ec2:DescribeSecurityGroups",
-        "ec2:DescribeSnapshots",
-        "ec2:DescribeSubnets",
-        "ec2:DescribeTags",
-        "ec2:DescribeVolumes",
-        "ec2:DetachVolume",
-        "ec2:GetPasswordData",
-        "ec2:ModifyImageAttribute",
-        "ec2:ModifyInstanceAttribute",
-        "ec2:ModifySnapshotAttribute",
-        "ec2:RegisterImage",
-        "ec2:RunInstances",
-        "ec2:StopInstances",
-        "ec2:TerminateInstances"
-      ],
-      "Resource": "*"
-    }
-  ]
-}
-EOF
-}
 
 # This policy is required for EC2 instances to download latest application revision.
 resource "aws_iam_policy" "CodeDeploy_EC2_S3" {
@@ -453,11 +402,6 @@ resource "aws_iam_user_policy_attachment" "attach_GH_Upload_To_S3" {
 resource "aws_iam_user_policy_attachment" "attach_GH_Code_Deploy" {
   user       = var.ghactions_username
   policy_arn = aws_iam_policy.GH_Code_Deploy.arn
-}
-#attaching GH_Code_Deploy policy to ghactions  user
-resource "aws_iam_user_policy_attachment" "attach_gh_ec2_ami" {
-  user       = var.ghactions_username
-  policy_arn = aws_iam_policy.gh_ec2_ami.arn
 }
 
 # create Role for Code Deploy
@@ -564,7 +508,7 @@ resource "aws_codedeploy_deployment_group" "example" {
 
 resource "aws_route53_record" "dev_record" {
   zone_id = var.zoneId
-  name    = var.dev_record_name
+  name    = var.route53_record_name
   type    = "A"
   ttl     = "300"
   records = [aws_instance.appserver.public_ip]

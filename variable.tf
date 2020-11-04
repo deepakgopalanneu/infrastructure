@@ -139,10 +139,7 @@ variable "zoneId"{
 	description = "Enter the ZoneId of the hosted Zone"
 
 }
-variable "dev_record_name"{
+variable "route53_record_name"{
 	description = "Enter Record Name ex: api.dev.domainname.tld"
 
-}
-variable "gh_ec2_ami"{
-	default="gh-ec2-ami"
 }
