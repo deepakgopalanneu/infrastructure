@@ -143,3 +143,13 @@ variable "route53_record_name"{
 	description = "Enter Record Name ex: api.dev.domainname.tld"
 
 }
+
+variable "CloudWatchAgentServerPolicy_arn"{
+	default = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+}
+variable "CloudWatchAgentAdminPolicy_arn"{
+	default = "arn:aws:iam::aws:policy/CloudWatchAgentAdminPolicy"
+}
+variable "AmazonSSMManagedInstanceCore_arn"{
+	default="arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
