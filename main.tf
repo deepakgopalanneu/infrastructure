@@ -153,7 +153,32 @@ resource "aws_security_group" "db_security_group" {
   }
 }
 
+# Laod balancer security group
+resource "aws_security_group" "elb_security_group" {
+  name        = "loadbalancer security group"
+  description = "Open port, 80"
+  vpc_id      = aws_vpc.csye6225_vpc.id
 
+  ingress {
+    description = "Allow inbound HTTP traffic"
+    from_port   = "80"
+    to_port     = "80"
+    protocol    = "tcp"
+    cidr_blocks = [var.routeTable_cidr]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  tags = {
+    Name = "Loadbalancer security group"
+  }
+}
+
+# Bucket to store Images
 resource "aws_s3_bucket" "bucket" {
   bucket        = var.bucketname
   acl           = "private"
@@ -203,36 +228,36 @@ resource "aws_db_instance" "database_server" {
     Name = "MySQL Database Server"
   }
 }
-resource "aws_instance" "appserver" {
-  ami                                  = var.ami_id
-  instance_type                        = var.ec2_instance_type
-  disable_api_termination              = false
-  instance_initiated_shutdown_behavior = var.terminate
-  vpc_security_group_ids               = [aws_security_group.app_security_group.id]
-  subnet_id                            = "${aws_subnet.subnet1.id}"
-  iam_instance_profile                 = aws_iam_instance_profile.ec2_s3_profile.name
-  depends_on                           = [aws_db_instance.database_server]
-  key_name                             = var.keyname
-  root_block_device {
-    volume_type           = "gp2"
-    volume_size           = 20
-    delete_on_termination = true
-  }
-  user_data = <<-EOF
- #!/bin/bash
- sudo echo export "S3_BUCKET_NAME=${aws_s3_bucket.bucket.bucket}" >> /etc/environment
- sudo echo export "DB_HOST=${aws_db_instance.database_server.address}" >> /etc/environment
- sudo echo export "DATASOURCE_URL=${aws_db_instance.database_server.endpoint}" >> /etc/environment
- sudo echo export "DB_NAME=${aws_db_instance.database_server.name}" >> /etc/environment
- sudo echo export "DATASOURCE_USERNAME=${aws_db_instance.database_server.username}" >> /etc/environment
- sudo echo export "DATASOURCE_PASSWORD=${aws_db_instance.database_server.password}" >> /etc/environment
- sudo echo export "AWS_REGION=${var.aws_region}" >> /etc/environment
- sudo echo export "AWS_PROFILE=${var.profile}" >> /etc/environment
- EOF
-  tags = {
-    Name = "Application Server"
-  }
-}
+# resource "aws_instance" "appserver" {
+#   ami                                  = var.ami_id
+#   instance_type                        = var.ec2_instance_type
+#   disable_api_termination              = false
+#   instance_initiated_shutdown_behavior = var.terminate
+#   vpc_security_group_ids               = [aws_security_group.app_security_group.id]
+#   subnet_id                            = "${aws_subnet.subnet1.id}"
+#   iam_instance_profile                 = aws_iam_instance_profile.ec2_role_profile.name
+#   depends_on                           = [aws_db_instance.database_server]
+#   key_name                             = var.keyname
+#   root_block_device {
+#     volume_type           = "gp2"
+#     volume_size           = 20
+#     delete_on_termination = true
+#   }
+#   user_data = <<-EOF
+#  #!/bin/bash
+#  sudo echo export "S3_BUCKET_NAME=${aws_s3_bucket.bucket.bucket}" >> /etc/environment
+#  sudo echo export "DB_HOST=${aws_db_instance.database_server.address}" >> /etc/environment
+#  sudo echo export "DATASOURCE_URL=${aws_db_instance.database_server.endpoint}" >> /etc/environment
+#  sudo echo export "DB_NAME=${aws_db_instance.database_server.name}" >> /etc/environment
+#  sudo echo export "DATASOURCE_USERNAME=${aws_db_instance.database_server.username}" >> /etc/environment
+#  sudo echo export "DATASOURCE_PASSWORD=${aws_db_instance.database_server.password}" >> /etc/environment
+#  sudo echo export "AWS_REGION=${var.aws_region}" >> /etc/environment
+#  sudo echo export "AWS_PROFILE=${var.profile}" >> /etc/environment
+#  EOF
+#   tags = {
+#     Name = "Application Server"
+#   }
+# }
 
 resource "aws_dynamodb_table_item" "dynamo_db_item" {
   table_name = aws_dynamodb_table.dynamodb_table.name
@@ -477,7 +502,7 @@ resource "aws_iam_role_policy_attachment" "cloudwatch_CloudWatchAgentAdminPolicy
 }
 
 
-resource "aws_iam_instance_profile" "ec2_s3_profile" {
+resource "aws_iam_instance_profile" "ec2_role_profile" {
   name = var.ec2InstanceProfile
   role = aws_iam_role.CodeDeployEC2ServiceRole.name
 }
@@ -531,10 +556,166 @@ resource "aws_codedeploy_deployment_group" "example" {
   }
 }
 
-resource "aws_route53_record" "dev_record" {
+
+
+# Autoscaling launch configuration
+
+resource "aws_launch_configuration" "launch_configuration" {
+  name                        = "autoscaling-launch-config"
+  image_id                    = var.ami_id
+  instance_type               = var.ec2_instance_type
+  key_name                    = var.keyname
+  associate_public_ip_address = true
+  user_data                   = <<-EOF
+ #!/bin/bash
+ sudo echo export "S3_BUCKET_NAME=${aws_s3_bucket.bucket.bucket}" >> /etc/environment
+ sudo echo export "DB_HOST=${aws_db_instance.database_server.address}" >> /etc/environment
+ sudo echo export "DATASOURCE_URL=${aws_db_instance.database_server.endpoint}" >> /etc/environment
+ sudo echo export "DB_NAME=${aws_db_instance.database_server.name}" >> /etc/environment
+ sudo echo export "DATASOURCE_USERNAME=${aws_db_instance.database_server.username}" >> /etc/environment
+ sudo echo export "DATASOURCE_PASSWORD=${aws_db_instance.database_server.password}" >> /etc/environment
+ sudo echo export "AWS_REGION=${var.aws_region}" >> /etc/environment
+ sudo echo export "AWS_PROFILE=${var.profile}" >> /etc/environment
+ EOF
+
+  iam_instance_profile = aws_iam_instance_profile.ec2_role_profile.name
+  # arn                  = "asg_launch_config"
+  security_groups      = [aws_security_group.app_security_group.id]
+  root_block_device {
+    volume_type           = "gp2"
+    volume_size           = 20
+    delete_on_termination = true
+  }
+}
+
+#  create auto-scaling group
+resource "aws_autoscaling_group" "autoscaling_group" {
+  name                 = "foobar3-terraform-test"
+  max_size             = 5
+  min_size             = 3
+  desired_capacity     = 3
+  launch_configuration = aws_launch_configuration.launch_configuration.name
+  default_cooldown     = 60
+  health_check_type    = "ELB"
+  target_group_arns    = [aws_lb_target_group.target_group.arn]
+  vpc_zone_identifier       = [aws_subnet.subnet1.id, aws_subnet.subnet2.id, aws_subnet.subnet3.id]
+
+  tag {
+    key                 = "Name"
+    value               = "Application Server"
+    propagate_at_launch = true
+  }
+}
+# create auto-scaling policy for ScaleUP
+resource "aws_autoscaling_policy" "WebServerScaleUpPolicy" {
+  name                   = "WebServerScaleUpPolicy"
+  scaling_adjustment     = 1
+  adjustment_type        = "ChangeInCapacity"
+  cooldown               = 60
+  autoscaling_group_name = aws_autoscaling_group.autoscaling_group.name
+}
+
+# create auto-scaling policy for ScaleDown
+resource "aws_autoscaling_policy" "WebServerScaleDownPolicy" {
+  name                   = "WebServerScaleDownPolicy"
+  scaling_adjustment     = -1
+  adjustment_type        = "ChangeInCapacity"
+  cooldown               = 60
+  autoscaling_group_name = aws_autoscaling_group.autoscaling_group.name
+}
+
+#  create cloudwatch alarm based on which autoscaling - ScaleUP will occur
+resource "aws_cloudwatch_metric_alarm" "CPUAlarmHigh" {
+  alarm_name          = "CPUAlarmHigh"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "2"
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = "300"
+  statistic           = "Average"
+  threshold           = "90"
+
+  dimensions = {
+    AutoScalingGroupName = aws_autoscaling_group.autoscaling_group.name
+  }
+
+  alarm_description = "Scale-up if CPU > 90% for 5 minutes"
+  alarm_actions     = [aws_autoscaling_policy.WebServerScaleUpPolicy.arn]
+}
+
+#  create cloudwatch alarm based on which autoscaling - SacleDown will occur
+resource "aws_cloudwatch_metric_alarm" "CPUAlarmLow" {
+  alarm_name          = "CPUAlarmLow"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "2"
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = "300"
+  statistic           = "Average"
+  threshold           = "70"
+
+  dimensions = {
+    AutoScalingGroupName = aws_autoscaling_group.autoscaling_group.name
+  }
+
+  alarm_description = "Scale-down if CPU < 70% for 5 minutes"
+  alarm_actions     = [aws_autoscaling_policy.WebServerScaleDownPolicy.arn]
+}
+
+# create target group 
+resource "aws_lb_target_group" "target_group" {
+  name        = "webapp-target-group"
+  port        = 8080
+  protocol    = "HTTP"
+  vpc_id      = aws_vpc.csye6225_vpc.id
+  target_type = "instance"
+
+  health_check {
+    path                = "/actuator/health"
+    port                = 8080
+    healthy_threshold   = 3
+    unhealthy_threshold = 2
+    timeout             = 3
+    interval            = 5
+    matcher             = "200" # has to be HTTP 200 or fails
+  }
+}
+
+# create listner for loadbalancer
+resource "aws_lb_listener" "listner" {
+  load_balancer_arn = aws_lb.webapp_elb.arn
+  port              = "80"
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.target_group.arn
+  }
+}
+
+#create application load balancer
+resource "aws_lb" "webapp_elb" {
+  name = "webapp-elb"
+  # availability_zones = ["us-west-2a", "us-west-2b", "us-west-2c"]
+  security_groups            = [aws_security_group.elb_security_group.id]
+  load_balancer_type         = "application"
+  internal                   = false
+  enable_deletion_protection = false
+  subnets                    = [aws_subnet.subnet1.id, aws_subnet.subnet2.id, aws_subnet.subnet3.id]
+  tags = {
+    Name = "webapp-loadbalancer"
+  }
+}
+
+# create route53 record pointing to loadbalancer
+resource "aws_route53_record" "env_based_record" {
   zone_id = var.zoneId
   name    = var.route53_record_name
   type    = "A"
-  ttl     = "300"
-  records = [aws_instance.appserver.public_ip]
+
+  alias {
+    name                   = aws_lb.webapp_elb.dns_name
+    zone_id                = aws_lb.webapp_elb.zone_id
+    evaluate_target_health = true
+  }
 }
