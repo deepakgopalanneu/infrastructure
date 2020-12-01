@@ -295,7 +295,7 @@ EOF
 resource "aws_iam_policy" "GH_Upload_To_S3" {
   name        = "${var.GH-Upload-To-S3}"
   description = "Policy for Github actions script to store artifacts in S3"
-  policy      = <<EOF
+  policy      = <<-EOF
 {
   "Version": "2012-10-17",
   "Statement": [
@@ -306,7 +306,8 @@ resource "aws_iam_policy" "GH_Upload_To_S3" {
         "s3:Get*",
         "s3:List*"
       ],
-      "Resource": [ "${var.codedeploy_bucket_arn}" , "${var.codedeploy_bucket_arn_star}" ]
+      "Resource": [ "${var.codedeploy_bucket_arn}" , "${var.codedeploy_bucket_arn_star}",
+        "${var.codedeploy_lambda_bucket_arn}", "${var.codedeploy_lambda_bucket_arn_star}"]
     }
   ]
 }
@@ -318,7 +319,7 @@ EOF
 resource "aws_iam_policy" "GH_Code_Deploy" {
   name        = "${var.GH-Code-Deploy}"
   description = "Policy allows GitHub Actions to call CodeDeploy APIs to initiate application deployment on EC2 instances."
-  policy      = <<EOF
+  policy      = <<-EOF
 {
   "Version": "2012-10-17",
   "Statement": [
@@ -329,7 +330,8 @@ resource "aws_iam_policy" "GH_Code_Deploy" {
         "codedeploy:GetApplicationRevision"
       ],
       "Resource": [
-        "arn:aws:codedeploy:${var.aws_region}:${var.account_id}:application:${var.codedeploy_appname}"
+        "arn:aws:codedeploy:${var.aws_region}:${var.account_id}:application:${var.codedeploy_appname}",
+        "arn:aws:codedeploy:${var.aws_region}:${var.account_id}:application:${var.codedeploy_lambda_appname}"
       ]
     },
     {
@@ -360,7 +362,7 @@ EOF
 
 #attach policies to ghactions user
 
-#attaching CodeDeploy_EC2_S3 policy to ghactions  user
+#attaching GH_Upload_To_S3 policy to ghactions  user
 resource "aws_iam_user_policy_attachment" "attach_GH_Upload_To_S3" {
   user       = var.ghactions_username
   policy_arn = aws_iam_policy.GH_Upload_To_S3.arn
@@ -373,9 +375,9 @@ resource "aws_iam_user_policy_attachment" "attach_GH_Code_Deploy" {
 }
 
 # create Role for Code Deploy
-resource "aws_iam_role" "CodeDeployEC2ServiceRole" {
-  name               = var.CodeDeployEC2ServiceRole
-  assume_role_policy = <<EOF
+resource "aws_iam_role" "EC2ServiceRole" {
+  name               = var.EC2ServiceRole
+  assume_role_policy = <<-EOF
 {
   "Version": "2012-10-17",
   "Statement": [
@@ -391,15 +393,14 @@ resource "aws_iam_role" "CodeDeployEC2ServiceRole" {
 }
 EOF
   tags = {
-    Name = "CodeDeployEC2ServiceRole access policy"
+    Name = "EC2ServiceRole access policy"
   }
 }
-
 #create CodeDeployServiceRole role
 resource "aws_iam_role" "CodeDeployServiceRole" {
   name = var.CodeDeployServiceRole
   # policy below has to be edited
-  assume_role_policy = <<EOF
+  assume_role_policy = <<-EOF
 {
   "Version": "2012-10-17",
   "Statement": [
@@ -418,66 +419,19 @@ EOF
     Name = "CodeDeployEC2Role access policy"
   }
 }
-##CloudWatchAgent Policy
-# resource "aws_iam_policy" "cloudwatch_EC2" {
-#   name = "cloudwatch-EC2"
-
-#   policy = <<EOF
-# {
-#  "Version": "2012-10-17",
-#  "Statement": [
-#  {
-#  "Effect": "Allow",
-#  "Action": [
-#  "cloudformation:DescribeStackResources",
-#  "cloudwatch:PutMetricData",
-#  "ec2:DescribeVolumes",
-#  "ec2:DescribeTags",
-#  "logs:PutLogEvents",
-#  "logs:DescribeLogStreams",
-#  "logs:DescribeLogGroups",
-#  "logs:CreateLogStream",
-#  "logs:CreateLogGroup"
-#  ],
-#  "Resource": "*"
-#  },
-#  {
-#  "Effect": "Allow",
-#  "Action": [
-#  "ssm:GetParameter"
-#  ],
-#  "Resource": "arn:aws:ssm:*:*:parameter/AmazonCloudWatch-*"
-#  }
-#  ]
-# }
-# EOF
-# }
-
-#Attaching AmazonSSMManagedInstanceCore to EC2 role
-# resource "aws_iam_role_policy_attachment" "cloudwatch_AmazonSSMManagedInstanceCore_attacher" {
-#   policy_arn = var.AmazonSSMManagedInstanceCore_arn
-#   role       = aws_iam_role.CodeDeployEC2ServiceRole.name
-# }
-
-#Attaching cloudwatch_EC2 to EC2 role
-# resource "aws_iam_role_policy_attachment" "cloudwatch_CloudWatchAgentAdminPolicy_attacher" {
-#   policy_arn = aws_iam_policy.cloudwatch_EC2.arn
-#   role       = aws_iam_role.CodeDeployEC2ServiceRole.name
-# }
-
 #Attaching CloudWatchAgentServerPolicy to EC2 role
 resource "aws_iam_role_policy_attachment" "cloudwatch_CloudWatchAgentServerPolicy_attacher" {
   policy_arn = var.CloudWatchAgentServerPolicy_arn
-  role       = aws_iam_role.CodeDeployEC2ServiceRole.name
+  role       = aws_iam_role.EC2ServiceRole.name
 }
 resource "aws_iam_instance_profile" "ec2_role_profile" {
   name = var.ec2InstanceProfile
-  role = aws_iam_role.CodeDeployEC2ServiceRole.name
+  role = aws_iam_role.EC2ServiceRole.name
 }
 
-#Policy to be attached with CodeDeployServiceRole role
-resource "aws_iam_role_policy_attachment" "CodeDeployEC2ServiceRole_webapps3_policy_attacher" {
-  role       = aws_iam_role.CodeDeployEC2ServiceRole.name
+#Policy to be attached with EC2ServiceRole role
+resource "aws_iam_role_policy_attachment" "EC2ServiceRole_webapps3_policy_attacher" {
+  role       = aws_iam_role.EC2ServiceRole.name
   policy_arn = aws_iam_policy.WebAppS3.arn
 }
 
@@ -490,8 +444,8 @@ resource "aws_iam_role_policy_attachment" "CodeDeployServiceRole_policy_attacher
 
 
 #attach policies to codedeploy role
-resource "aws_iam_role_policy_attachment" "CodeDeployEC2ServiceRole_policy_attacher" {
-  role       = aws_iam_role.CodeDeployEC2ServiceRole.name
+resource "aws_iam_role_policy_attachment" "EC2ServiceRole_policy_attacher" {
+  role       = aws_iam_role.EC2ServiceRole.name
   policy_arn = aws_iam_policy.CodeDeploy_EC2_S3.arn
 }
 
@@ -712,3 +666,206 @@ resource "aws_route53_record" "dns_record" {
  evaluate_target_health = false
  }
 }
+
+#################### SNS & LAMBDA #####################
+
+#create SNS topic
+resource "aws_sns_topic" "email_topic" {
+  name = var.topicname
+}
+
+#create Lambda 
+resource "aws_lambda_function" "lambda_for_email" {
+  s3_bucket = "lambdacodedeploy.prod.deepakgopalan.me"
+  s3_key = "Lambda-1.0-SNAPSHOT.jar"
+  function_name = "lambda_for_email"
+  role          = aws_iam_role.lambda_service_role.arn
+  handler       = var.lambdaHandlerMethod
+  runtime = "java8"
+}
+
+#subscribe to the topic
+resource "aws_sns_topic_subscription" "subscribe_lambda_sns" {
+  topic_arn = aws_sns_topic.email_topic.arn
+  protocol  = "lambda"
+  endpoint  = aws_lambda_function.lambda_for_email.arn
+}
+
+# IAM role for Lambda 
+resource "aws_iam_role" "lambda_service_role" {
+  name = "lambda_service_role"
+
+  assume_role_policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": "sts:AssumeRole",
+      "Principal": {
+        "Service": "lambda.amazonaws.com"
+      },
+      "Effect": "Allow",
+      "Sid": ""
+    }
+  ]
+}
+EOF
+}
+
+#IAM ROLE policy For Lambda to access SES Domain
+resource "aws_iam_role_policy" "lambda_ses_policy" {
+  name = "lambda_ses_policy"
+  role = aws_iam_role.lambda_service_role.id
+
+  policy = <<-EOF
+  {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Action": "ses:SendEmail",
+        "Resource": "arn:aws:ses:us-east-1:384467288578:identity/prod.deepakgopalan.me"
+      }
+    ]
+  }  
+  EOF
+}
+
+#IAM ROLE For Codedeploy for Lambda
+
+
+
+
+
+#IAM Policy for EC2 to publish to SNS Topic
+resource "aws_iam_role_policy" "ec2_sns_policy" {
+  name = "ec2_sns_policy"
+  role = aws_iam_role.EC2ServiceRole.id
+
+  policy = <<-EOF
+  {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Action": ["sns:Publish","sns:ListTopics"],
+        "Effect": "Allow",
+        "Resource": "${aws_sns_topic.email_topic.arn}"
+      }
+    ]
+  }
+  EOF
+}
+
+#CodeDepoly App for Lambda
+resource "aws_codedeploy_app" "codedeploy_lambda" {
+  compute_platform = "Lambda"
+  name             = var.codedeploy_lambda_appname
+}
+
+resource "aws_codedeploy_deployment_config" "lambda_codedeploy_config" {
+  deployment_config_name = "test-deployment-config"
+  compute_platform       = "Lambda"
+
+  traffic_routing_config {
+    type = "TimeBasedLinear"
+
+    time_based_linear {
+      interval   = 10
+      percentage = 10
+    }
+  }
+}
+
+resource "aws_codedeploy_deployment_group" "lambda_codedeploy_deployment_group" {
+  app_name               = aws_codedeploy_app.codedeploy_lambda.name
+  deployment_group_name  = "lambda_codedeploy_deployment_group"
+  service_role_arn       = var.codedeploy_lambda_role_arn
+  deployment_config_name = aws_codedeploy_deployment_config.lambda_codedeploy_config.id
+
+  auto_rollback_configuration {
+    enabled = true
+    events  = ["DEPLOYMENT_FAILURE"]
+  }
+
+}
+
+# This policy is required for Lambda Function to download latest application revision.
+resource "aws_iam_policy" "CodeDeploy_Lambda_S3" {
+  name        = "${var.CodeDeploy-Lambda-S3}"
+  description = "Policy for Lambda function to store and retrieve artifacts in S3"
+  policy      = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:Get*",
+        "s3:List*"
+      ],
+      "Resource": [ "${var.codedeploy_lambda_bucket_arn}" , "${var.codedeploy_lambda_bucket_arn_star}" ]
+    }
+  ]
+}
+EOF
+}
+
+#attach policies to codedeploy Lambda role
+resource "aws_iam_role_policy_attachment" "LambdaServiceRole_CodeDeploy_Lambda_S3_policy_attacher" {
+  role       = aws_iam_role.lambda_service_role.name
+  policy_arn = aws_iam_policy.CodeDeploy_Lambda_S3.arn
+}
+
+# This policy is required for Lambda Function to download latest application revision.
+resource "aws_iam_policy" "AWSCodeDeployRoleForLambda" {
+  name        = "AWSCodeDeployRoleForLambda"
+  description = "AWSCodeDeployRoleForLambda Policy for codedeploy"
+  policy      = <<-EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Action": [
+                "cloudwatch:DescribeAlarms",
+                "lambda:UpdateAlias",
+                "lambda:GetAlias",
+                "lambda:GetProvisionedConcurrencyConfig",
+                "sns:Publish"
+            ],
+            "Resource": "*",
+            "Effect": "Allow"
+        },
+        {
+            "Action": [
+                "s3:GetObject",
+                "s3:GetObjectVersion"
+            ],
+            "Resource": "arn:aws:s3:::lambdacodedeploy.prod.deepakgopalan.me/*",
+            "Effect": "Allow"
+        },
+        {
+            "Action": [
+                "s3:GetObject",
+                "s3:GetObjectVersion"
+            ],
+            "Resource": "*",
+            "Condition": {
+                "StringEquals": {
+                    "s3:ExistingObjectTag/UseWithCodeDeploy": "true"
+                }
+            },
+            "Effect": "Allow"
+        },
+        {
+            "Action": [
+                "lambda:InvokeFunction"
+            ],
+            "Resource": "${aws_lambda_function.lambda_for_email.arn}",
+            "Effect": "Allow"
+        }
+    ]
+}
+EOF
+}
+
+
