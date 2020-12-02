@@ -103,7 +103,7 @@ resource "aws_security_group" "app_security_group" {
     from_port   = "8080"
     to_port     = "8080"
     protocol    = "tcp"
-    cidr_blocks = [var.routeTable_cidr]
+    security_groups = [aws_security_group.elb_security_group.id]
   }
   ingress {
     description = "Allow inbound SSH traffic"
@@ -633,14 +633,14 @@ resource "aws_lb" "webapp_elb" {
   }
 }
 
-resource "aws_security_group_rule" "applicationSecurityGroupRule" {
-  type              = "ingress"
-  from_port         = 8080
-  to_port           = 8080
-  protocol          = "tcp"
-  security_group_id = aws_security_group.app_security_group.id
-  source_security_group_id = "${aws_security_group.elb_security_group.id}"
-} 
+# resource "aws_security_group_rule" "applicationSecurityGroupRule" {
+#   type              = "ingress"
+#   from_port         = 8080
+#   to_port           = 8080
+#   protocol          = "tcp"
+#   security_group_id = aws_security_group.app_security_group.id
+#   source_security_group_id = "${aws_security_group.elb_security_group.id}"
+# } 
 
 # get  route53 zone pointing to existing record name
 data "aws_route53_zone" "primary" {
