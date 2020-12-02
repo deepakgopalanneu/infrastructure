@@ -99,6 +99,9 @@ variable "codedeploy_bucket_arn_star"{
 variable "CodeDeploy-EC2-S3"{
 	default="CodeDeploy-EC2-S3"
 }
+variable "CodeDeploy-Lambda-S3"{
+	default="CodeDeploy-Lambda-S3"
+}
 variable "GH-Upload-To-S3"{
 	default="GH-Upload-To-S3"
 }
@@ -111,8 +114,8 @@ variable "GH-Code-Deploy"{
 	default= "GH-Code-Deploy"
 }
 
-variable "CodeDeployEC2ServiceRole"{
-	default="CodeDeployEC2ServiceRole"
+variable "EC2ServiceRole"{
+	default="EC2ServiceRole"
 }
 
 variable "CodeDeployServiceRole"{
@@ -153,3 +156,27 @@ variable "CloudWatchAgentAdminPolicy_arn"{
 variable "AmazonSSMManagedInstanceCore_arn"{
 	default="arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
+
+variable "lambdaHandlerMethod" {
+  default="com.deepak.lambda.LambdaMethodHandler"
+}
+
+variable "ses_prod_arn"{
+	default = "arn:aws:ses:us-east-1:384467288578:identity/prod.deepakgopalan.me"
+}
+
+variable "topicname"{
+	default = "TOPIC_EMAIL"
+}
+
+variable "codedeploy_lambda_role_arn"{
+	default = "arn:aws:iam::aws:policy/service-role/AWSCodeDeployRoleForLambda"
+}
+
+variable "codedeploy_lambda_appname"{
+	default = "Lambda_codedeploy_app"
+}
+
+variable "codedeploy_lambda_bucket_arn"{}
+
+variable "codedeploy_lambda_bucket_arn_star"{}
