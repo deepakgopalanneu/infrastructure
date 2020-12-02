@@ -49,7 +49,7 @@ resource "aws_subnet" "subnet2" {
 }
 resource "aws_subnet" "subnet3" {
 
-  vpc_id                  = "${aws_vpc.csye6225_vpc.id}"
+  vpc_id                  = aws_vpc.csye6225_vpc.id
   cidr_block              = "${var.subnet3_cidr}"
   availability_zone       = "${var.aws_region}c"
   map_public_ip_on_launch = true
@@ -99,26 +99,20 @@ resource "aws_security_group" "app_security_group" {
     cidr_blocks = [var.routeTable_cidr]
   }
   ingress {
+    description = "Allow inbound HTTP traffic"
+    from_port   = "8080"
+    to_port     = "8080"
+    protocol    = "tcp"
+    cidr_blocks = [var.routeTable_cidr]
+  }
+  ingress {
     description = "Allow inbound SSH traffic"
     from_port   = "22"
     to_port     = "22"
     protocol    = "tcp"
     cidr_blocks = [var.routeTable_cidr]
   }
-  ingress {
-    description = "Allow inbound HTTPS traffic"
-    from_port   = "443"
-    to_port     = "443"
-    protocol    = "tcp"
-    cidr_blocks = [var.routeTable_cidr]
-  }
-  ingress {
-    description = "Allow traffic to application port"
-    from_port   = "8080"
-    to_port     = "8080"
-    protocol    = "tcp"
-    cidr_blocks = [var.routeTable_cidr]
-  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -306,8 +300,7 @@ resource "aws_iam_policy" "GH_Upload_To_S3" {
         "s3:Get*",
         "s3:List*"
       ],
-      "Resource": [ "${var.codedeploy_bucket_arn}" , "${var.codedeploy_bucket_arn_star}",
-        "${var.codedeploy_lambda_bucket_arn}", "${var.codedeploy_lambda_bucket_arn_star}"]
+      "Resource": [ "${var.codedeploy_bucket_arn}" , "${var.codedeploy_bucket_arn_star}"]
     }
   ]
 }
@@ -645,7 +638,7 @@ resource "aws_security_group_rule" "applicationSecurityGroupRule" {
   from_port         = 8080
   to_port           = 8080
   protocol          = "tcp"
-  security_group_id = "${aws_security_group.app_security_group.id}"
+  security_group_id = aws_security_group.app_security_group.id
   source_security_group_id = "${aws_security_group.elb_security_group.id}"
 } 
 
@@ -675,12 +668,14 @@ resource "aws_sns_topic" "email_topic" {
 
 #create Lambda 
 resource "aws_lambda_function" "lambda_for_email" {
-  s3_bucket = "lambdacodedeploy.prod.deepakgopalan.me"
+  s3_bucket = "codedeploy.prod.deepakgopalan.me"
   s3_key = "Lambda-1.0-SNAPSHOT.jar"
   function_name = "lambda_for_email"
   role          = aws_iam_role.lambda_service_role.arn
   handler       = var.lambdaHandlerMethod
   runtime = "java8"
+  timeout = 120
+  memory_size = 256
 }
 
 #subscribe to the topic
@@ -729,11 +724,70 @@ resource "aws_iam_role_policy" "lambda_ses_policy" {
   }  
   EOF
 }
+#IAM policy For Lambda to access Dynamo DB
+resource "aws_iam_role_policy" "lambda_dynamo_policy" {
+  name = "lambda_dynamo_policy"
+  role = aws_iam_role.lambda_service_role.id
+
+  policy = <<-EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "",
+            "Effect": "Allow",
+            "Action": [
+                "dynamodb:CreateTable",
+                "dynamodb:BatchWriteItem",
+                "dynamodb:UpdateTimeToLive",
+                "dynamodb:PutItem",
+                "dynamodb:PartiQLSelect",
+                "dynamodb:DeleteItem",
+                "dynamodb:PartiQLUpdate",
+                "dynamodb:GetItem",
+                "dynamodb:PartiQLInsert",
+                "dynamodb:Query",
+                "dynamodb:UpdateItem",
+                "dynamodb:PartiQLDelete"
+            ],
+            "Resource": [
+                "arn:aws:dynamodb:*:384467288578:table/*/index/*",
+                "arn:aws:dynamodb:us-east-1:384467288578:table/csye6225"
+            ]
+        },
+        {
+            "Sid": "VisualEditor1",
+            "Effect": "Allow",
+            "Action": [
+                "dynamodb:CreateTable",
+                "dynamodb:BatchWriteItem",
+                "dynamodb:UpdateTimeToLive",
+                "dynamodb:PutItem",
+                "dynamodb:PartiQLSelect",
+                "dynamodb:DeleteItem",
+                "dynamodb:PartiQLUpdate",
+                "dynamodb:GetItem",
+                "dynamodb:PartiQLInsert",
+                "dynamodb:Query",
+                "dynamodb:UpdateItem",
+                "dynamodb:PartiQLDelete"
+            ],
+            "Resource": "arn:aws:dynamodb:us-east-1:384467288578:table/csye6225"
+        },
+        {
+            "Sid": "",
+            "Effect": "Allow",
+            "Action": "dynamodb:ListTables",
+            "Resource": "*"
+        }
+    ]
+}
+EOF
+}
 
 #IAM Policy for Lambda to allow SNS event to trigger it
-resource "aws_iam_role_policy" "lambda_sns_policy" {
-  name = "lambda_ses_policy"
-  role = aws_iam_role.lambda_service_role.id
+resource "aws_iam_policy" "lambda_sns_policy" {
+  name = "lambda_sns_policy"
 
   policy = <<-EOF
 {
@@ -742,8 +796,8 @@ resource "aws_iam_role_policy" "lambda_sns_policy" {
       {"ArnLike":{"AWS:SourceArn":"${aws_sns_topic.email_topic.arn}"}},
       "Resource":"${aws_lambda_function.lambda_for_email.arn}",
       "Action":"lambda:invokeFunction",
-      "Principal":{"Service":"sns.amazonaws.com"},
-      "Sid":"sns invoke","Effect":"Allow"
+      "Sid":"",
+      "Effect":"Allow"
     }],
   "Id":"default",
   "Version":"2012-10-17"
@@ -753,6 +807,17 @@ resource "aws_iam_role_policy" "lambda_sns_policy" {
 
 
 
+#Policy to be attached with Lambda role
+resource "aws_iam_role_policy_attachment" "lambda_snsinvokepolicy_attacher" {
+  role       = aws_iam_role.lambda_service_role.name
+  policy_arn = aws_iam_policy.lambda_sns_policy.arn
+}
+
+#
+resource "aws_iam_role_policy_attachment" "BasicExecutionAccessToLambdaFunctionRole" {
+ policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+ role = aws_iam_role.lambda_service_role.name
+}
 
 #IAM Policy for EC2 to publish to SNS Topic
 resource "aws_iam_role_policy" "ec2_sns_policy" {
@@ -764,7 +829,7 @@ resource "aws_iam_role_policy" "ec2_sns_policy" {
     "Version": "2012-10-17",
     "Statement": [
       {
-        "Action": ["sns:Publish","sns:ListTopics"],
+        "Action": ["sns:Publish","sns:CreateTopic"],
         "Effect": "Allow",
         "Resource": "${aws_sns_topic.email_topic.arn}"
       }
@@ -773,5 +838,11 @@ resource "aws_iam_role_policy" "ec2_sns_policy" {
   EOF
 }
 
+resource "aws_lambda_permission" "allow_sns" {
+ action = "lambda:*"
+ function_name = aws_lambda_function.lambda_for_email.function_name
+ principal = "sns.amazonaws.com"
+ source_arn = aws_sns_topic.email_topic.arn
+}
 
 
