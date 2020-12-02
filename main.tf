@@ -330,8 +330,7 @@ resource "aws_iam_policy" "GH_Code_Deploy" {
         "codedeploy:GetApplicationRevision"
       ],
       "Resource": [
-        "arn:aws:codedeploy:${var.aws_region}:${var.account_id}:application:${var.codedeploy_appname}",
-        "arn:aws:codedeploy:${var.aws_region}:${var.account_id}:application:${var.codedeploy_lambda_appname}"
+        "arn:aws:codedeploy:${var.aws_region}:${var.account_id}:application:${var.codedeploy_appname}"
       ]
     },
     {
@@ -731,8 +730,26 @@ resource "aws_iam_role_policy" "lambda_ses_policy" {
   EOF
 }
 
-#IAM ROLE For Codedeploy for Lambda
+#IAM Policy for Lambda to allow SNS event to trigger it
+resource "aws_iam_role_policy" "lambda_sns_policy" {
+  name = "lambda_ses_policy"
+  role = aws_iam_role.lambda_service_role.id
 
+  policy = <<-EOF
+{
+  "Statement":[
+    {"Condition":
+      {"ArnLike":{"AWS:SourceArn":"${aws_sns_topic.email_topic.arn}"}},
+      "Resource":"${aws_lambda_function.lambda_for_email.arn}",
+      "Action":"lambda:invokeFunction",
+      "Principal":{"Service":"sns.amazonaws.com"},
+      "Sid":"sns invoke","Effect":"Allow"
+    }],
+  "Id":"default",
+  "Version":"2012-10-17"
+}
+  EOF
+}
 
 
 
@@ -756,116 +773,5 @@ resource "aws_iam_role_policy" "ec2_sns_policy" {
   EOF
 }
 
-#CodeDepoly App for Lambda
-resource "aws_codedeploy_app" "codedeploy_lambda" {
-  compute_platform = "Lambda"
-  name             = var.codedeploy_lambda_appname
-}
-
-resource "aws_codedeploy_deployment_config" "lambda_codedeploy_config" {
-  deployment_config_name = "test-deployment-config"
-  compute_platform       = "Lambda"
-
-  traffic_routing_config {
-    type = "TimeBasedLinear"
-
-    time_based_linear {
-      interval   = 10
-      percentage = 10
-    }
-  }
-}
-
-resource "aws_codedeploy_deployment_group" "lambda_codedeploy_deployment_group" {
-  app_name               = aws_codedeploy_app.codedeploy_lambda.name
-  deployment_group_name  = "lambda_codedeploy_deployment_group"
-  service_role_arn       = var.codedeploy_lambda_role_arn
-  deployment_config_name = aws_codedeploy_deployment_config.lambda_codedeploy_config.id
-
-  auto_rollback_configuration {
-    enabled = true
-    events  = ["DEPLOYMENT_FAILURE"]
-  }
-
-}
-
-# This policy is required for Lambda Function to download latest application revision.
-resource "aws_iam_policy" "CodeDeploy_Lambda_S3" {
-  name        = "${var.CodeDeploy-Lambda-S3}"
-  description = "Policy for Lambda function to store and retrieve artifacts in S3"
-  policy      = <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "s3:Get*",
-        "s3:List*"
-      ],
-      "Resource": [ "${var.codedeploy_lambda_bucket_arn}" , "${var.codedeploy_lambda_bucket_arn_star}" ]
-    }
-  ]
-}
-EOF
-}
-
-#attach policies to codedeploy Lambda role
-resource "aws_iam_role_policy_attachment" "LambdaServiceRole_CodeDeploy_Lambda_S3_policy_attacher" {
-  role       = aws_iam_role.lambda_service_role.name
-  policy_arn = aws_iam_policy.CodeDeploy_Lambda_S3.arn
-}
-
-# This policy is required for Lambda Function to download latest application revision.
-resource "aws_iam_policy" "AWSCodeDeployRoleForLambda" {
-  name        = "AWSCodeDeployRoleForLambda"
-  description = "AWSCodeDeployRoleForLambda Policy for codedeploy"
-  policy      = <<-EOF
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Action": [
-                "cloudwatch:DescribeAlarms",
-                "lambda:UpdateAlias",
-                "lambda:GetAlias",
-                "lambda:GetProvisionedConcurrencyConfig",
-                "sns:Publish"
-            ],
-            "Resource": "*",
-            "Effect": "Allow"
-        },
-        {
-            "Action": [
-                "s3:GetObject",
-                "s3:GetObjectVersion"
-            ],
-            "Resource": "arn:aws:s3:::lambdacodedeploy.prod.deepakgopalan.me/*",
-            "Effect": "Allow"
-        },
-        {
-            "Action": [
-                "s3:GetObject",
-                "s3:GetObjectVersion"
-            ],
-            "Resource": "*",
-            "Condition": {
-                "StringEquals": {
-                    "s3:ExistingObjectTag/UseWithCodeDeploy": "true"
-                }
-            },
-            "Effect": "Allow"
-        },
-        {
-            "Action": [
-                "lambda:InvokeFunction"
-            ],
-            "Resource": "${aws_lambda_function.lambda_for_email.arn}",
-            "Effect": "Allow"
-        }
-    ]
-}
-EOF
-}
 
 
