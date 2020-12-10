@@ -33,7 +33,7 @@ variable "bucketname"{
 }
 variable "db_instance_class"{
 	description="Instance Class for the Database Server"
-	default = "db.t3.micro"
+	default = "db.t2.small"
 }
 variable "db_identifier"{
 	description= "The name of the RDS instance "
