@@ -160,7 +160,13 @@ resource "aws_security_group" "elb_security_group" {
     protocol    = "tcp"
     cidr_blocks = [var.routeTable_cidr]
   }
-
+  ingress {
+    description = "Allow inbound HTTPS traffic"
+    from_port   = "443"
+    to_port     = "443"
+    protocol    = "tcp"
+    cidr_blocks = [var.routeTable_cidr]
+  }
   egress {
     from_port   = 0
     to_port     = 0
@@ -212,15 +218,28 @@ resource "aws_db_instance" "database_server" {
   name                   = var.dbname
   username               = var.db_username
   password               = var.db_password
-  parameter_group_name   = "default.mysql5.7"
   publicly_accessible    = false
   db_subnet_group_name   = aws_db_subnet_group.db_subnet_group.name
   vpc_security_group_ids = [aws_security_group.db_security_group.id]
   multi_az               = false
   skip_final_snapshot    = true
+  storage_encrypted      = true
+  parameter_group_name   = aws_db_parameter_group.rds_paramgrp.name
+
   tags = {
     Name = "MySQL Database Server"
   }
+}
+
+resource "aws_db_parameter_group" "rds_paramgrp" {
+ name = "rds-params"
+ family = "mysql5.7"
+ 
+ parameter {
+ name = "performance_schema"
+ value = 1
+ apply_method = "pending-reboot"
+ }
 }
 
 resource "aws_dynamodb_table_item" "dynamo_db_item" {
@@ -229,7 +248,7 @@ resource "aws_dynamodb_table_item" "dynamo_db_item" {
 
   item = <<ITEM
 {
-  "id": {"S": "something"}
+  "id": {"S": "test entry from terraform"}
 }
 ITEM
 }
@@ -520,7 +539,7 @@ resource "aws_autoscaling_group" "autoscaling_group" {
   default_cooldown     = 60
   health_check_type    = "ELB"
   target_group_arns    = [aws_lb_target_group.target_group.arn]
-  vpc_zone_identifier       = [aws_subnet.subnet1.id, aws_subnet.subnet2.id, aws_subnet.subnet3.id]
+  vpc_zone_identifier  = [aws_subnet.subnet1.id, aws_subnet.subnet2.id, aws_subnet.subnet3.id]
   lifecycle {
     create_before_destroy = true
   }
@@ -614,11 +633,28 @@ resource "aws_lb_listener" "listner" {
   protocol          = "HTTP"
 
   default_action {
+    type = "redirect"
+
+    redirect {
+      port        = "443"
+      protocol    = "HTTPS"
+      status_code = "HTTP_301"
+    }
+  }
+}
+
+# create listner for HTTPS
+resource "aws_lb_listener" "https_listner" {
+  load_balancer_arn = aws_lb.webapp_elb.arn
+  port              = "443"
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-2016-08"
+  certificate_arn   = data.aws_acm_certificate.certificate.arn
+  default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.target_group.arn
   }
 }
-
 #create application load balancer
 resource "aws_lb" "webapp_elb" {
   name = "webapp-elb"
@@ -633,14 +669,13 @@ resource "aws_lb" "webapp_elb" {
   }
 }
 
-# resource "aws_security_group_rule" "applicationSecurityGroupRule" {
-#   type              = "ingress"
-#   from_port         = 8080
-#   to_port           = 8080
-#   protocol          = "tcp"
-#   security_group_id = aws_security_group.app_security_group.id
-#   source_security_group_id = "${aws_security_group.elb_security_group.id}"
-# } 
+# get certificate from Aws certificate manager
+data "aws_acm_certificate" "certificate" {
+  domain = var.route53_record_name
+  tags = {
+    Name   = "Imported Cert"
+  }
+}
 
 # get  route53 zone pointing to existing record name
 data "aws_route53_zone" "primary" {
@@ -844,5 +879,3 @@ resource "aws_lambda_permission" "allow_sns" {
  principal = "sns.amazonaws.com"
  source_arn = aws_sns_topic.email_topic.arn
 }
-
-
